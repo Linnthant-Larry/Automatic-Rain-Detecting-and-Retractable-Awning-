@@ -1,0 +1,92 @@
+#include <Wire.h> 
+#include <Adafruit_PWMServoDriver.h>
+
+const int SERVO_0 = 120;
+const int SERVO_90 = 320;
+const int SERVO_120 = 400;
+
+const int rainSensorPin = 2; 
+const int buttonPin = 6;
+
+const int servo1Ch = 0; 
+const int servo2Ch = 1; 
+const int servo3Ch = 2; 
+const int servo4Ch = 3; 
+
+bool isOpen = false; 
+bool lastButtonState = HIGH; 
+bool manualOverride = false; 
+
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+
+int invertServo34PWM(int pwmValue) {
+  return SERVO_0 + (SERVO_90 - (pwmValue - SERVO_0));
+}
+
+void setup() {
+  pinMode(rainSensorPin, INPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
+
+  Serial.begin(9600);
+  pwm.begin();
+  pwm.setPWMFreq(50);
+  delay(10);
+
+  closePanels();
+}
+
+void loop() {
+  bool isRaining = (digitalRead(rainSensorPin) == LOW);
+  bool buttonState = digitalRead(buttonPin);
+
+  if (buttonState == LOW && lastButtonState == HIGH) {
+    Serial.println("Button edge detected"); 
+    delay(50);
+    if (digitalRead(buttonPin) == LOW) {
+      Serial.println("Confirmed button press");
+      manualOverride = true; 
+      isOpen = !isOpen; 
+
+      if (isOpen) {
+        Serial.println("Manual Override: Opening roof...");
+        openPanels();
+      } else {
+        Serial.println("Manual Override: Closing roof...");
+        closePanels();
+      }
+    }
+  }
+  lastButtonState = buttonState; 
+
+  if (!manualOverride) {
+    if (isRaining && !isOpen) {
+      Serial.println("Auto: Rain detected - Opening roof...");
+      openPanels();
+      isOpen = true;
+    } else if (!isRaining && isOpen) {
+      Serial.println("Auto: No Rain - Closing roof..."); 
+      closePanels();
+      isOpen= false; 
+    }
+  }
+
+  delay(500);
+}
+
+void openPanels() {
+  pwm.setPWM(servo1Ch, 0, SERVO_120);
+  pwm.setPWM(servo2Ch, 0, SERVO_120);
+  delay(1000);
+
+  pwm.setPWM(servo3Ch, 0, SERVO_90);
+  pwm.setPWM(servo4Ch, 0, invertServo34PWM(SERVO_90));
+}
+
+void closePanels() {
+  pwm.setPWM(servo4Ch, 0, invertServo34PWM(SERVO_0));
+  pwm.setPWM(servo3Ch, 0, SERVO_0);
+  delay(1000);
+
+  pwm.setPWM(servo1Ch, 0, SERVO_0); 
+  pwm.setPWM(servo2Ch, 0, SERVO_0);
+}
